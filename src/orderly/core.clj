@@ -2,26 +2,27 @@
 
 (defn cache-wrapper
   "wraps a function in another function that adds a sort-of argument-value-agnostic memoization"
-  [f] 
-  (let [cache (atom ::not-set)] 
+  [f cache]
     (fn [x] 
       (locking cache 
         (if (= @cache ::not-set)
           (reset! cache 
-                  (f x)))) 
-      @cache)))
+                  (f x))))
+      @cache))
 
 (defn prep-plan
   "Add provided input values to plan. Apply cache-wrapper to each action function."
   [plan input-map]
   (into (map #(hash-map :inputs []
                         :outputs [(first %)]
-                        :action (fn [im] (hash-map (first %) (second %))))
+                        :action (constantly {(first %) (second %)}))
              (seq input-map))
         
-        (map (fn [step] (update-in step 
-                                   [:action] 
-                                   #(cache-wrapper %)))
+        (map (fn [step]
+                (let [cache (atom ::not-set)]
+                  (-> step
+                      (assoc :cached-result cache)
+                      (update-in [:action] #(cache-wrapper % cache)))))
              plan)))
 
 (defn execute-recur
